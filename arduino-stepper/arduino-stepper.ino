@@ -4,12 +4,16 @@
 #define C 4
 #define D 5
 #define NUMBER_OF_STEPS_PER_REV 512
+#define STEP_CHUNK_SIZE 8 // Adjust for a greater/smaller turn per button press
 #define DRIVER_DELAY 2 // Found to be the minimum time a coarse step will work
 const int MOTOR_COILS[]={8,12,4,6,2,3,1,9};
 
-#define REVERSE_PIN 8
-#define FORWARD_PIN 9
+#define FORWARD_PIN 8
+#define RESET_PIN 9
 #define STATUS_LED 10
+
+int gStepsSoFar = 0;
+int gStepsPerPress = NUMBER_OF_STEPS_PER_REV / STEP_CHUNK_SIZE;
 
 void setup() {
   pinMode(A,OUTPUT);
@@ -17,37 +21,35 @@ void setup() {
   pinMode(C,OUTPUT);
   pinMode(D,OUTPUT);
 
-  pinMode(REVERSE_PIN, INPUT);
   pinMode(FORWARD_PIN, INPUT);
+  pinMode(RESET_PIN, INPUT);
   pinMode(STATUS_LED, OUTPUT);
   Serial.begin(9600);
 }
 
 void loop() {
-  int j = 0;
-  while (j < 512){
-    binaryFineStep(false);
-    j ++;
-  }
-  while (j>0){
-    binaryFineStep(true);
-    j--;
-  }
-    while (j < 512){
-    binaryCoarseStep(false);
-    j ++;
-  }
-  while (j>0){
-    binaryCoarseStep(true);
-    j--;
-  }
-
-  // TODO hook up control buttons
-  if (digitalRead(FORWARD_PIN) > 0){;
+ 
+  if (digitalRead(RESET_PIN) > 0){
+    // Reset to the position we started in
+    digitalWrite(STATUS_LED, HIGH);
+    while (gStepsSoFar >= 0){
+      binaryCoarseStep(true);
+      gStepsSoFar --;
+    }
     digitalWrite(STATUS_LED, LOW);
   }
-  else if (digitalRead(REVERSE_PIN) > 0){
+  else if (digitalRead(FORWARD_PIN) > 0){
     digitalWrite(STATUS_LED, HIGH);
+    // Step around in grouped increments
+    for (int i = 0; i<gStepsPerPress; i++){
+      binaryCoarseStep(false);
+    }
+    gStepsSoFar+=gStepsPerPress;
+    if(gStepsSoFar > NUMBER_OF_STEPS_PER_REV){
+      // We have performed a full rotation, subtract this
+      gStepsSoFar = gStepsSoFar - NUMBER_OF_STEPS_PER_REV;
+    }
+    digitalWrite(STATUS_LED, LOW);
   }
 
 }
@@ -99,7 +101,7 @@ void binaryCoarseStep(bool reverse){
     }
   }
   else{
-    int i = 0;
+    int i = 1;
     while (i < 8){
       writeBinaryStepper(MOTOR_COILS[i]);
       delay(DRIVER_DELAY);
